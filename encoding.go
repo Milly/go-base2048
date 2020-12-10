@@ -175,11 +175,6 @@ func (enc *Encoding) Decode(dst []byte, src []rune) (n int, err error) {
 		}
 	}
 
-	if remaining > 0 {
-		dst[n] = byte(stage >> (8 - remaining))
-		n++
-	}
-
 	return
 }
 
