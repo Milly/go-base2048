@@ -72,6 +72,80 @@ func testRange(t *testing.T, msg string, args ...interface{}) bool {
 	return true
 }
 
+func testPanic(t *testing.T, proc func(), msg string, args ...interface{}) (ok bool) {
+	defer func() {
+		err := recover()
+		if err != args[len(args)-1] {
+			msg = fmt.Sprintf(msg, args...)
+			t.Errorf("panic = %v, %s", err, msg)
+			ok = false
+		}
+	}()
+	ok = true
+	proc()
+	return
+}
+
+func TestNewEncodingWithInvalidEncoderLength(t *testing.T) {
+	encoder := make([]rune, 2047)
+	copy(encoder[:], DefaultEncodeChars[:2047])
+	testPanic(t, func() {
+		NewEncoding(encoder, DefaultTrailingChars)
+	}, "NewEncoding() = panic want %q", "encoder is not 2048 characters")
+}
+
+func TestNewEncodingWithInvalidTrailingLength(t *testing.T) {
+	trailing := make([]rune, 7)
+	copy(trailing[:], DefaultTrailingChars[:7])
+	testPanic(t, func() {
+		NewEncoding(DefaultEncodeChars, trailing)
+	}, "NewEncoding() = panic want %q", "trailing is not 8 characters")
+}
+
+func TestNewEncodingWithEncoderContainsCLRF(t *testing.T) {
+	var testsets = []struct {
+		pos   int
+		value rune
+	}{
+		{0, '\r'},
+		{0, '\n'},
+		{1, '\r'},
+		{1, '\n'},
+		{2047, '\r'},
+		{2047, '\n'},
+	}
+	encoder := make([]rune, 2048)
+	for _, p := range testsets {
+		copy(encoder[:], DefaultEncodeChars)
+		encoder[p.pos] = p.value
+		testPanic(t, func() {
+			NewEncoding(encoder, DefaultTrailingChars)
+		}, "NewEncoding() = panic want %q", "encoder contains newline character")
+	}
+}
+
+func TestNewEncodingWithTrailingContainsCLRF(t *testing.T) {
+	var testsets = []struct {
+		pos   int
+		value rune
+	}{
+		{0, '\r'},
+		{0, '\n'},
+		{1, '\r'},
+		{1, '\n'},
+		{7, '\r'},
+		{7, '\n'},
+	}
+	trailing := make([]rune, 8)
+	for _, p := range testsets {
+		copy(trailing[:], DefaultTrailingChars)
+		trailing[p.pos] = p.value
+		testPanic(t, func() {
+			NewEncoding(DefaultEncodeChars, trailing)
+		}, "NewEncoding() = panic want %q", "trailing contains newline character")
+	}
+}
+
 func TestEncode(t *testing.T) {
 	enc := DefaultEncoding
 	for _, p := range testsets {
