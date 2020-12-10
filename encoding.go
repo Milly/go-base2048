@@ -120,8 +120,18 @@ func (enc *Encoding) Decode(dst []byte, src []rune) (n int, err error) {
 	var stage uint32 = 0x0
 	var remaining uint8 = 0
 	var residue uint8 = 0
+
+	// Truncate trailing newline characters
 	se := len(src) - 1
+	for se >= 0 && (src[se] == '\r' || src[se] == '\n') {
+		se--
+	}
+
 	for si := 0; si <= se; si++ {
+		if src[si] == '\r' || src[si] == '\n' {
+			continue
+		}
+
 		residue = (residue + bits_per_char) % 8
 		var n_new_bits uint8 = 0
 		new_bits, ok := enc.decodeMap[src[si]]
@@ -131,8 +141,6 @@ func (enc *Encoding) Decode(dst []byte, src []rune) (n int, err error) {
 			} else {
 				n_new_bits = 11
 			}
-		} else if src[si] == '\r' || src[si] == '\n' {
-			continue
 		} else {
 			if si < se {
 				return n, CorruptInputError(si)

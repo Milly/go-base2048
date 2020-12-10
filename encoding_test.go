@@ -117,6 +117,24 @@ func TestDecodeString(t *testing.T) {
 	}
 }
 
+func TestDecodeWithCRLF(t *testing.T) {
+	var testsets = []struct {
+		decoded, encoded string
+	}{
+		{"foo", "\r\xD5\x93\xDA\x9D\xE0\xBC\x90"},
+		{"foo", "\xD5\x93\n\xDA\x9D\xE0\xBC\x90"},
+		{"foo", "\xD5\x93\xDA\x9D\xE0\xBC\x90\r"},
+		{"foo", "\xD5\x93\xDA\x9D\xE0\xBC\x90\n"},
+		{"foo", "\xD5\x93\xDA\x9D\xE0\xBC\x90\r\n"},
+	}
+	enc := DefaultEncoding
+	for _, p := range testsets {
+		dbuf, err := enc.DecodeString(p.encoded)
+		testEqual(t, "DecodeString([% X]) = error %v, want %v", p.encoded, err, error(nil))
+		testEqual(t, "DecodeString([% X]) = %q, want %q", p.encoded, string(dbuf), p.decoded)
+	}
+}
+
 func TestDecodedLen(t *testing.T) {
 	enc := DefaultEncoding
 	for _, p := range testlens {
