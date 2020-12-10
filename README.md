@@ -1,5 +1,6 @@
 # go-base2048
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/Milly/go-base2048.svg)](https://pkg.go.dev/github.com/Milly/go-base2048)
 [![Go](https://github.com/Milly/go-base2048/workflows/Go/badge.svg)](https://github.com/Milly/go-base2048/actions?query=workflow%3AGo)
 [![codecov](https://codecov.io/gh/Milly/go-base2048/branch/master/graph/badge.svg)](https://codecov.io/gh/Milly/go-base2048)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Milly/go-base2048)](https://goreportcard.com/report/github.com/Milly/go-base2048)
