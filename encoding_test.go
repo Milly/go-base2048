@@ -218,7 +218,7 @@ func TestDecodedLen(t *testing.T) {
 	}
 }
 
-func TestCorruptInputError(t *testing.T) {
+func TestDecodeError(t *testing.T) {
 	var testerrors = []struct {
 		decoded, encoded string
 		pos              int64
