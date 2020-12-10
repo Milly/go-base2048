@@ -15,22 +15,20 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-var base2048File = flag.String("base", "base2048.txt", "base2048 chars file name")
-var tailFile = flag.String("tail", "tail.txt", "tail chars file name")
-var outputFile = flag.String("output", "decode_map.go", "output file name")
-
 func readRunes(path string, num int) ([]rune, error) {
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return nil, err //nolint:wrapcheck
 	}
 
 	str := string(bytes)
 	str = strings.NewReplacer("\r", "", "\n", "").Replace(str)
 	runes := []rune(str)
+
 	if len(runes) != num {
+		//nolint:goerr113
 		return nil, fmt.Errorf(
-			"in %s: The number of characters should be %d, but %d.",
+			"in %s: The number of characters should be %d, but %d",
 			path,
 			num,
 			len(runes),
@@ -41,6 +39,9 @@ func readRunes(path string, num int) ([]rune, error) {
 }
 
 func main() {
+	base2048File := flag.String("base", "base2048.txt", "base2048 chars file name")
+	tailFile := flag.String("tail", "tail.txt", "tail chars file name")
+	outputFile := flag.String("output", "decode_map.go", "output file name")
 	flag.Parse()
 
 	base2048Runes, err := readRunes(*base2048File, 2048)
@@ -53,7 +54,7 @@ func main() {
 		log.Panic(err)
 	}
 
-	var v = struct {
+	v := struct {
 		Base2048File string
 		TailFile     string
 		Encoder      []rune
@@ -66,7 +67,7 @@ func main() {
 	}
 
 	var buf bytes.Buffer
-	err = template.Must(template.New("output").Parse(output)).Execute(&buf, v)
+	err := template.Must(template.New("output").Parse(output)).Execute(&buf, v)
 	if err != nil {
 		log.Panic(err)
 	}
@@ -76,7 +77,7 @@ func main() {
 		log.Panic(err)
 	}
 
-	err = ioutil.WriteFile(*outputFile, data, 0644)
+	err = ioutil.WriteFile(*outputFile, data, 0o644)
 	if err != nil {
 		log.Panic(err)
 	}

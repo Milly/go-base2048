@@ -1,32 +1,41 @@
-// base2048 package implements base2048 encoding of binary data
+// Package base2048 implements base2048 encoding of binary data
 package base2048
 
-const bits_per_char = 11
+const (
+	bitsPerChar  = 11
+	bitsPerByte  = 8
+	encoderSize  = 2048
+	trailingSize = 8
+)
 
 // Encoding is a radix 2048 encoding/decoding scheme, defined by
 // a 2048 unicode characters and a trailing 8 unicode characters.
 // It has no standard (RFC, etc...) specifications.
 type Encoding struct {
-	encode    [2048]rune
+	encode    [encoderSize]rune
 	decodeMap map[rune]uint16
-	tail      [8]rune
+	tail      [trailingSize]rune
+	tailMap   map[rune]uint16
 }
 
 // NewEncoding returns a new Encoding defined by the given unicode characters,
 // which should be a 2048-characters slice for encoder and a 8-characters slice
 // for trailing.
 func NewEncoding(encoder []rune, trailing []rune) *Encoding {
-	if len(encoder) != 2048 {
+	if len(encoder) != encoderSize {
 		panic("encoder is not 2048 characters")
 	}
-	if len(trailing) != 8 {
+
+	if len(trailing) != trailingSize {
 		panic("trailing is not 8 characters")
 	}
+
 	for i := 0; i < len(encoder); i++ {
 		if encoder[i] == '\n' || encoder[i] == '\r' {
 			panic("encoder contains newline character")
 		}
 	}
+
 	for i := 0; i < len(trailing); i++ {
 		if trailing[i] == '\n' || trailing[i] == '\r' {
 			panic("trailing contains newline character")
@@ -37,14 +46,21 @@ func NewEncoding(encoder []rune, trailing []rune) *Encoding {
 	copy(enc.encode[:], encoder)
 	copy(enc.tail[:], trailing)
 	enc.decodeMap = make(map[rune]uint16, len(encoder))
+	enc.tailMap = make(map[rune]uint16, len(trailing))
+
 	for i := 0; i < len(encoder); i++ {
 		enc.decodeMap[encoder[i]] = uint16(i)
 	}
+
+	for i := 0; i < len(trailing); i++ {
+		enc.tailMap[trailing[i]] = uint16(i)
+	}
+
 	return enc
 }
 
 // DefaultEncoding is the default base2048 encoding defined in this module.
-var DefaultEncoding = NewEncoding(DefaultEncodeChars, DefaultTrailingChars)
+var DefaultEncoding = NewEncoding(DefaultEncodeChars, DefaultTrailingChars) //nolint:gochecknoglobals
 
 // Encode encodes src using the encoding enc, writing
 // EncodedLen(len(src)) characters to dst.
@@ -58,22 +74,26 @@ func (enc *Encoding) Encode(dst []rune, src []byte) {
 	// outside of the loop to speed up the encoder.
 	_ = enc.encode
 
-	var stage uint16 = 0x0
-	var remaining uint8 = 0
-	di := 0
+	var (
+		stage     uint16
+		remaining uint8
+		di        int
+	)
+
 	se := len(src)
 	for si := 0; si < se; si++ {
 		b := uint16(src[si])
-		need := bits_per_char - remaining
-		if need <= 8 {
-			remaining = 8 - need
+
+		need := bitsPerChar - remaining
+		if need <= bitsPerByte {
+			remaining = bitsPerByte - need
 			index := (stage << need) | (b >> remaining)
+			stage = b & ((1 << remaining) - 1)
 			dst[di] = enc.encode[index]
 			di++
-			stage = b & ((1 << remaining) - 1)
 		} else {
-			stage = (stage << 8) | b
-			remaining += 8
+			remaining += bitsPerByte
+			stage = (stage << bitsPerByte) | b
 		}
 	}
 
@@ -82,7 +102,7 @@ func (enc *Encoding) Encode(dst []rune, src []byte) {
 	}
 
 	// Add the remaining small block
-	if remaining <= (bits_per_char - 8) {
+	if remaining <= (bitsPerChar - bitsPerByte) {
 		dst[di] = enc.tail[stage]
 	} else {
 		dst[di] = enc.encode[stage]
@@ -93,13 +113,14 @@ func (enc *Encoding) Encode(dst []rune, src []byte) {
 func (enc *Encoding) EncodeToString(src []byte) string {
 	buf := make([]rune, enc.EncodedLen(len(src)))
 	enc.Encode(buf, src)
+
 	return string(buf)
 }
 
 // EncodedLen returns the length in characters of the base2048 encoding
 // of an input buffer of bytes length n.
 func (enc *Encoding) EncodedLen(n int) int {
-	return (n*8 + bits_per_char - 1) / bits_per_char
+	return (n*bitsPerByte + bitsPerChar - 1) / bitsPerChar
 }
 
 // Decode decodes src using the encoding enc. It writes at most
@@ -117,9 +138,11 @@ func (enc *Encoding) Decode(dst []byte, src []rune) (n int, err error) {
 	// receiver can't be nil.
 	_ = enc.decodeMap
 
-	var stage uint32 = 0x0
-	var remaining uint8 = 0
-	var residue uint8 = 0
+	var (
+		stage     uint32
+		remaining uint8
+		residue   uint8
+	)
 
 	// Truncate trailing newline characters
 	se := len(src) - 1
@@ -132,50 +155,40 @@ func (enc *Encoding) Decode(dst []byte, src []rune) (n int, err error) {
 			continue
 		}
 
-		residue = (residue + bits_per_char) % 8
-		var n_new_bits uint8 = 0
-		new_bits, ok := enc.decodeMap[src[si]]
-		if ok {
+		residue = (residue + bitsPerChar) % bitsPerByte
+
+		var (
+			newBits      uint16
+			newBitsCount uint8
+			ok           bool
+		)
+
+		if newBits, ok = enc.decodeMap[src[si]]; ok {
 			if si == se {
-				n_new_bits = 11 - residue
+				newBitsCount = bitsPerChar - residue
 			} else {
-				n_new_bits = 11
+				newBitsCount = bitsPerChar
 			}
 		} else {
-			if si < se {
+			newBitsCount = bitsPerByte - remaining
+			newBits, ok = enc.tailMap[src[si]]
+			if !ok || si < se || newBits >= (1<<newBitsCount) {
 				return n, CorruptInputError(si)
 			}
-
-			ti := 0
-			for ; ti < len(enc.tail); ti++ {
-				if enc.tail[ti] == src[si] {
-					break
-				}
-			}
-			if ti == len(enc.tail) {
-				return n, CorruptInputError(si)
-			}
-
-			need := 8 - remaining
-			if ti >= (1 << need) {
-				return n, CorruptInputError(si)
-			}
-
-			n_new_bits = need
-			new_bits = uint16(ti)
 		}
 
-		remaining += n_new_bits
-		stage = (stage << n_new_bits) | uint32(new_bits)
-		for remaining >= 8 {
-			remaining -= 8
+		stage = (stage << newBitsCount) | uint32(newBits)
+		remaining += newBitsCount
+
+		for remaining >= bitsPerByte {
+			remaining -= bitsPerByte
 			dst[n] = byte(stage >> remaining)
+			stage &= (1 << remaining) - 1
 			n++
-			stage = stage & ((1 << remaining) - 1)
 		}
 	}
 
-	return
+	return n, nil
 }
 
 // DecodeString returns the bytes represented by the base64 string s.
@@ -183,11 +196,12 @@ func (enc *Encoding) DecodeString(s string) ([]byte, error) {
 	sbuf := []rune(s)
 	dbuf := make([]byte, enc.DecodedLen(len(sbuf)))
 	n, err := enc.Decode(dbuf, sbuf)
+
 	return dbuf[:n], err
 }
 
 // DecodedLen returns the maximum length in bytes of the decoded data
 // corresponding to n characters of base2048-encoded data.
 func (enc *Encoding) DecodedLen(n int) int {
-	return n * bits_per_char / 8
+	return n * bitsPerChar / bitsPerByte
 }

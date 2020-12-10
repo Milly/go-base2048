@@ -4,6 +4,7 @@ import (
 	"strconv"
 )
 
+// CorruptInputError represents the position of the illegal data to be decoded.
 type CorruptInputError int64
 
 func (e CorruptInputError) Error() string {
